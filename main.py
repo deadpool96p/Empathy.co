@@ -76,11 +76,16 @@ async def load_artifacts():
         else:
             print(f"Model path not found: {path} for language '{lang}'")
 
-    print("Initializing HuggingFace Text Pipeline (Multilingual)...")
+    print("Initializing HuggingFace Text Pipeline...")
     try:
-        # User requested cardiffnlp/twitter-xlm-roberta-base-emotion to handle Hindi/Marathi mappings correctly
-        TEXT_CLASSIFIER = pipeline("text-classification", model="cardiffnlp/twitter-xlm-roberta-base-emotion", top_k=3)
-        print("Multilingual Text Pipeline loaded successfully.")
+        # j-hartmann model is freely available (no auth needed) and outputs:
+        # anger, disgust, fear, joy, neutral, sadness, surprise
+        TEXT_CLASSIFIER = pipeline(
+            "text-classification",
+            model="j-hartmann/emotion-english-distilroberta-base",
+            top_k=3
+        )
+        print("Text Pipeline loaded successfully.")
     except Exception as e:
         print(f"Failed to load HuggingFace pipeline: {e}")
 
@@ -158,11 +163,11 @@ async def analyze(
                 
                 # Standardize output naming
                 top_emotion = results[0]['label']
-                # Mappings from "cardiffnlp" to our standard classes
+                # j-hartmann outputs: anger, disgust, fear, joy, neutral, sadness, surprise
                 mapping = {
-                    "joy": "happy", "sadness": "sad", "anger": "angry", 
-                    "fear": "fearful", "love": "happy", "surprise": "surprised",
-                    "optimism": "happy", "disgust": "disgust", "anticipation": "happy"
+                    "joy": "happy", "sadness": "sad", "anger": "angry",
+                    "fear": "fearful", "surprise": "surprised",
+                    "disgust": "disgust", "neutral": "neutral"
                 }
                 mapped_emotion = mapping.get(top_emotion, top_emotion)
                 
