@@ -1,5 +1,6 @@
 import { useRef, useState, useEffect } from "react";
 import { Upload, Mic, Play, Square, CheckCircle, Trash2 } from "lucide-react";
+import { toast } from "react-toastify";
 
 interface AudioInputProps {
   onAudioSelected: (file: File | null) => void;
@@ -16,6 +17,8 @@ export function AudioInput({ onAudioSelected, selectedFile }: AudioInputProps) {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const timerRef = useRef<number | null>(null);
+  
+  const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
 
   useEffect(() => {
     // Cleanup audio resources
@@ -34,7 +37,13 @@ export function AudioInput({ onAudioSelected, selectedFile }: AudioInputProps) {
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
-      onAudioSelected(e.target.files[0]);
+      const file = e.target.files[0];
+      if (file.size > MAX_FILE_SIZE) {
+        toast.error("File size exceeds 50MB limit.");
+        if (fileInputRef.current) fileInputRef.current.value = "";
+        return;
+      }
+      onAudioSelected(file);
     }
   };
 
@@ -42,9 +51,15 @@ export function AudioInput({ onAudioSelected, selectedFile }: AudioInputProps) {
     e.preventDefault();
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
       const file = e.dataTransfer.files[0];
-      if (file.type.includes('audio')) {
-        onAudioSelected(file);
+      if (!file.type.includes('audio')) {
+        toast.error("Please drop an audio file.");
+        return;
       }
+      if (file.size > MAX_FILE_SIZE) {
+        toast.error("File size exceeds 50MB limit.");
+        return;
+      }
+      onAudioSelected(file);
     }
   };
 
@@ -169,7 +184,7 @@ export function AudioInput({ onAudioSelected, selectedFile }: AudioInputProps) {
           Drag & drop audio file
         </p>
         <p className="font-['Inter'] text-xs text-[#7F8C8D] dark:text-gray-400 text-center">
-          WAV, MP3, FLAC (Max 25MB)
+          WAV, MP3, FLAC (Max 50MB)
         </p>
       </div>
 
