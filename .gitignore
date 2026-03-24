@@ -1,0 +1,17 @@
+venv/
+__pycache__/
+*.pyc
+node_modules/
+.env
+data/
+data/raw/
+models/
+*.h5
+*.pkl
+*.npy
+frontend/node_modules/
+frontend/dist/
+Design EmpathyCo SaaS Dashboard/
+# Optional: OS files
+.DS_Store
+Thumbs.db
