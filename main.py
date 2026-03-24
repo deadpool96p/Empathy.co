@@ -158,10 +158,11 @@ async def analyze(
                 
                 # Standardize output naming
                 top_emotion = results[0]['label']
-                # Mappings from "bhadresh-savani" to our standard classes
+                # Mappings from "cardiffnlp" to our standard classes
                 mapping = {
                     "joy": "happy", "sadness": "sad", "anger": "angry", 
-                    "fear": "fearful", "love": "happy", "surprise": "surprised"
+                    "fear": "fearful", "love": "happy", "surprise": "surprised",
+                    "optimism": "happy", "disgust": "disgust", "anticipation": "happy"
                 }
                 mapped_emotion = mapping.get(top_emotion, top_emotion)
                 
@@ -201,4 +202,4 @@ async def analyze(
     return response
 
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(app, host="0.0.0.0", port=8001)
