@@ -1,36 +1,37 @@
-# src/fusion.py
 import numpy as np
 
 class MultimodalFusion:
     def __init__(self, audio_weight=0.6, text_weight=0.4):
         self.audio_weight = audio_weight
         self.text_weight = text_weight
-        # Mapping from audio emotion indices (0-7) to text emotion names
-        self.audio_to_text = {
-            0: None,      # neutral – no direct match
-            1: 'joy',     # calm
-            2: 'joy',     # happy
-            3: 'sadness', # sad
-            4: 'anger',   # angry
-            5: 'fear',    # fearful
-            6: None,      # disgust – not in text model
-            7: 'surprise' # surprised
+        # Mapping table for text emotions to audio indices
+        # Consistent with UnifiedEmotionMapper
+        self.text_to_audio_idx = {
+            "happy": 2,
+            "sad": 3,
+            "angry": 4
         }
 
-    def fuse(self, audio_probs, text_probs_dict):
+    def fuse(self, audio_probs, text_emotion_results, label_encoder_classes):
         """
-        audio_probs: numpy array of 8 probabilities from audio model.
-        text_probs_dict: dict from text model, keys are emotion names.
-        Returns a dict of fused scores for text emotions.
+        audio_probs: list/array of 8 probabilities from audio model.
+        text_emotion_results: list of dicts [{'emotion': 'happy', 'score': 0.9}, ...]
+        label_encoder_classes: list of emotion strings.
+        Returns (final_emotion, final_confidence)
         """
-        fused = {}
-        for text_emotion, text_score in text_probs_dict.items():
-            # Find corresponding audio index
-            audio_idx = None
-            for idx, name in self.audio_to_text.items():
-                if name == text_emotion:
-                    audio_idx = idx
-                    break
-            audio_score = audio_probs[audio_idx] if audio_idx is not None else 0.0
-            fused[text_emotion] = self.audio_weight * audio_score + self.text_weight * text_score
-        return fused
+        fused_probs = np.array(audio_probs)
+        
+        for tr in text_emotion_results:
+            idx = self.text_to_audio_idx.get(tr['emotion'])
+            if idx is not None:
+                # Weighted combine: final_prob = audio_p * 0.6 + text_p * 0.4
+                fused_probs[idx] = (fused_probs[idx] * self.audio_weight) + (tr['score'] * self.text_weight)
+        
+        # Re-normalize
+        fused_probs = fused_probs / np.sum(fused_probs)
+        
+        final_idx = np.argmax(fused_probs)
+        final_emotion = str(label_encoder_classes[final_idx])
+        final_confidence = float(fused_probs[final_idx])
+        
+        return final_emotion, final_confidence

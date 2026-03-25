@@ -1,86 +1,48 @@
-# src/text_analyzer.py
 from transformers import pipeline
 import torch
 
 class TextEmotionAnalyzer:
     """
-    A flexible text emotion analyzer that can use different Hugging Face models.
-    Available models (key: (model_id, emotion_labels)):
-        - 'emotion'     : bhadresh-savani/bert-base-uncased-emotion (6 emotions)
-        - 'go_emotions' : SamLowe/roberta-base-go_emotions (28 emotions)
-        - 'distilroberta': j-hartmann/emotion-english-distilroberta-base (7 emotions)
-        - 'twitter'     : cardiffnlp/twitter-roberta-base-emotion (4 emotions: anger, joy, optimism, sadness)
+    Multilingual Text Emotion Analyzer utilizing Hugging Face Transformers.
     """
-    # Registry of available models
-    MODELS = {
-        'emotion': {
-            'id': "bhadresh-savani/bert-base-uncased-emotion",
-            'labels': ['sadness', 'joy', 'love', 'anger', 'fear', 'surprise']
-        },
-        'go_emotions': {
-            'id': "SamLowe/roberta-base-go_emotions",
-            'labels': ['admiration', 'amusement', 'anger', 'annoyance', 'approval',
-                       'caring', 'confusion', 'curiosity', 'desire', 'disappointment',
-                       'disapproval', 'disgust', 'embarrassment', 'excitement', 'fear',
-                       'gratitude', 'grief', 'joy', 'love', 'nervousness', 'optimism',
-                       'pride', 'realization', 'relief', 'remorse', 'sadness', 'surprise',
-                       'neutral']
-        },
-        'distilroberta': {
-            'id': "j-hartmann/emotion-english-distilroberta-base",
-            'labels': ['anger', 'disgust', 'fear', 'joy', 'neutral', 'sadness', 'surprise']
-        },
-        'twitter': {
-            'id': "cardiffnlp/twitter-roberta-base-emotion",
-            'labels': ['anger', 'joy', 'optimism', 'sadness']
-        }
-    }
-
-    def __init__(self, model_name='go_emotions', use_gpu=True):
-        """
-        Initialize the text emotion classifier.
-
-        Args:
-            model_name (str): Key from MODELS dict. Default 'go_emotions'.
-            use_gpu (bool): Whether to use GPU if available.
-        """
-        if model_name not in self.MODELS:
-            raise ValueError(f"Model '{model_name}' not supported. Choose from: {list(self.MODELS.keys())}")
-
-        self.model_name = model_name
-        model_info = self.MODELS[model_name]
-        self.emotions = model_info['labels']
-        model_id = model_info['id']
-
+    def __init__(self, model_id="MilaNLProc/xlm-emo-t", use_gpu=True):
+        self.model_id = model_id
         device = 0 if use_gpu and torch.cuda.is_available() else -1
-        self.classifier = pipeline(
-            "text-classification",
-            model=model_id,
-            return_all_scores=True,
-            device=device
-        )
-        print(f"Loaded text model: {model_name} ({model_id})")
+        
+        try:
+            self.classifier = pipeline(
+                "text-classification",
+                model=model_id,
+                top_k=None,
+                device=device
+            )
+            print(f"Loaded multilingual text model: {model_id}")
+        except Exception as e:
+            print(f"Failed to load text pipeline {model_id}: {e}")
+            self.classifier = None
+
+        # Standardize output naming
+        self.mapping = {
+            "joy": "happy", 
+            "sadness": "sad", 
+            "anger": "angry",
+            "optimism": "happy"
+        }
 
     def analyze(self, text):
-        """
-        Predict emotion from text.
+        if not self.classifier or not text.strip():
+            return []
 
-        Args:
-            text (str): Input text.
-
-        Returns:
-            dict: Emotion names -> confidence scores (0-1). All emotions in self.emotions are included.
-        """
-        if not text.strip():
-            return {emotion: 0.0 for emotion in self.emotions}
-
-        results = self.classifier(text)[0]  # list of dicts: [{'label': 'joy', 'score': 0.98}, ...]
-
-        # Convert to dict with all emotions present (fill missing with 0.0)
-        probs = {item['label']: item['score'] for item in results}
-        # Ensure all emotions in self.emotions are present (in case model output misses some)
-        for emotion in self.emotions:
-            if emotion not in probs:
-                probs[emotion] = 0.0
-
-        return probs
+        results = self.classifier(text)[0] # returns list of dicts [{'label': 'joy', 'score': 0.99}, ...]
+        
+        processed_results = []
+        for res in results:
+            mapped_label = self.mapping.get(res['label'], res['label'])
+            processed_results.append({
+                "emotion": mapped_label,
+                "score": float(res['score'])
+            })
+        
+        # Sort by score descending
+        processed_results.sort(key=lambda x: x['score'], reverse=True)
+        return processed_results
