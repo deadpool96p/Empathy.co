@@ -1,17 +1,26 @@
+# Environments
 venv/
+.env
+
+# Python artifacts
 __pycache__/
 *.pyc
+
+# Node / JS artifacts
 node_modules/
-.env
-data/
+**/node_modules/
+dist/
+**/dist/
+
+# Data
 data/raw/
-models/
-*.h5
-*.pkl
-*.npy
-frontend/node_modules/
-frontend/dist/
-Design EmpathyCo SaaS Dashboard/
-# Optional: OS files
+
+# Temporary / OS files
+temp_recording.wav
+temp_analyze_*
+temp_transcribe_*
 .DS_Store
 Thumbs.db
+
+# Keep models and processed data as they are relatively small (< 10MB)
+# (Specific model files: audio_model_simple.h5, audio_model_advanced.h5, etc.)
