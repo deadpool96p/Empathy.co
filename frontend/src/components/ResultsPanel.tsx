@@ -175,6 +175,29 @@ export function ResultsPanel({ results }: ResultsPanelProps) {
           </div>
         )}
       </div>
+
+      {results.summary && (
+        <div className="mt-8 p-6 bg-gradient-to-br from-gray-50 to-white dark:from-gray-800/50 dark:to-gray-900/50 border border-gray-100 dark:border-gray-800 rounded-2xl shadow-sm relative overflow-hidden group">
+          <div className="absolute top-0 left-0 w-1 h-full bg-[#FF6B6B]"></div>
+          <h4 className="font-['Poppins'] font-bold text-[#2C3E50] dark:text-white mb-3 flex items-center gap-2">
+            <span className="p-1.5 bg-red-50 dark:bg-red-900/20 rounded-lg">
+              <svg className="w-4 h-4 text-[#FF6B6B]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </span>
+            Emotion Summary & Insights
+          </h4>
+          <p className="font-['Inter'] text-[#34495E] dark:text-gray-300 leading-relaxed text-lg italic">
+            "{results.summary}"
+          </p>
+          {results.detected_language && results.detected_language !== 'en' && (
+            <p className="mt-3 font-['Inter'] text-[10px] text-[#7F8C8D] dark:text-gray-500 uppercase tracking-widest flex items-center gap-1.5">
+              <span className="w-1 h-1 rounded-full bg-blue-400"></span>
+              Translated from {results.detected_language === 'hi' ? 'Hindi' : results.detected_language === 'mr' ? 'Marathi' : results.detected_language}
+            </p>
+          )}
+        </div>
+      )}
     </div>
   );
 }

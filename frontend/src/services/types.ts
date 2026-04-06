@@ -25,6 +25,8 @@ export interface AnalysisResponse {
   final_confidence?: number;
   audio?: AudioAnalysis;
   text?: TextAnalysis;
+  summary?: string;
+  detected_language?: string;
   error?: string;
 }
 

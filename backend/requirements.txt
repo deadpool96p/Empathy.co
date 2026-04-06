@@ -28,3 +28,6 @@ SpeechRecognition==3.10.0
 matplotlib==3.7.2
 seaborn==0.12.2
 tqdm==4.65.0
+langdetect==1.0.9
+sentencepiece==0.1.99
+sacremoses==0.0.53

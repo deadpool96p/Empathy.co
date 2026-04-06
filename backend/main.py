@@ -16,6 +16,92 @@ from src.audio_processor import EnhancedFeatureExtractor
 from src.model_trainer import TimeShuffleAttention, LightweightConvTransformer
 from src.text_analyzer import TextEmotionAnalyzer
 from src.fusion import MultimodalFusion
+from langdetect import detect, DetectorFactory
+DetectorFactory.seed = 42
+
+class EmotionSummarizer:
+    TEMPLATES = {
+        "neutral": [
+            "The speaker maintains a steady and composed demeanor, showing no strong emotional bias.",
+            "A balanced and objective tone is observed, with little variation in emotional intensity."
+        ],
+        "calm": [
+            "The interaction is serene and relaxed, reflecting a high degree of emotional stability.",
+            "A peaceful and gentle tone suggests a state of comfort and ease."
+        ],
+        "happy": [
+            "The content is noticeably upbeat and positive, radiating a sense of joy and optimism.",
+            "High spirits and enthusiasm are evident, indicating a very pleasant emotional state."
+        ],
+        "sad": [
+            "A heavy and melancholic tone is present, suggesting feelings of sorrow or loss.",
+            "The expression reflects a subdued and dejected mood, often associated with disappointment."
+        ],
+        "angry": [
+            "The tone is sharp and confrontational, indicating significant frustration or hostility.",
+            "A tense and aggressive emotional state is clear, directed towards a specific issue or person."
+        ],
+        "fearful": [
+            "The speaker sounds anxious and apprehensive, suggesting a high level of stress or worry.",
+            "A sense of vulnerability and unease is present, as if facing a perceived threat."
+        ],
+        "disgust": [
+            "The expression conveys strong disapproval and aversion, often related to something offensive.",
+            "A dismissive and repelled tone is observed, indicating a deep sense of distaste."
+        ],
+        "surprised": [
+            "The tone reflects sudden astonishment or shock, responding to something unexpected.",
+            "A high-arousal reaction is evident, indicating a significant break from normal expectations."
+        ]
+    }
+
+    def generate(self, text, emotion, confidence):
+        import random
+        emotion = emotion.lower()
+        template = random.choice(self.TEMPLATES.get(emotion, self.TEMPLATES["neutral"]))
+        
+        confidence_str = f"with {int(confidence * 100)}% certainty"
+        summary = f"{template} Based on the analysis, the dominant emotion is {emotion} ({confidence_str})."
+        
+        # If text is available and long enough, add a small contextual bit
+        if text and len(text.split()) > 3:
+            # Simple keyword extraction (very basic)
+            words = [w for w in text.split() if len(w) > 4]
+            if words:
+                summary += f" The language used points towards themes of '{words[0]}'."
+                
+        return summary
+
+class LanguageTranslator:
+    def __init__(self):
+        self.pipelines = {}
+
+    def translate(self, text, src_lang):
+        if src_lang == 'en':
+            return text
+            
+        model_map = {
+            'hi': 'Helsinki-NLP/opus-mt-hi-en',
+            'mr': 'Helsinki-NLP/opus-mt-mr-en'
+        }
+        
+        if src_lang not in model_map:
+            return text
+            
+        if src_lang not in self.pipelines:
+            from transformers import pipeline
+            print(f"Loading translation model for {src_lang}...")
+            self.pipelines[src_lang] = pipeline("translation", model=model_map[src_lang])
+            
+        try:
+            result = self.pipelines[src_lang](text)
+            return result[0]['translation_text']
+        except Exception as e:
+            print(f"Translation error: {e}")
+            return text
+
+SUMMARIZER = EmotionSummarizer()
+TRANSLATOR = LanguageTranslator()
 
 app = FastAPI(title="EmpathyCo Backend")
 
@@ -158,8 +244,11 @@ async def analyze(
         elif "en" in MODELS:
             language = "en"
 
+    # Initialize results
     response = {}
-    
+    temp_audio_path = None
+    context_text = text
+
     # --- AUDIO INFERENCE ---
     audio_probs = None
     if audio:
@@ -168,43 +257,33 @@ async def analyze(
             with open(temp_audio_path, "wb") as buffer:
                 shutil.copyfileobj(audio.file, buffer)
             
-            if os.path.getsize(temp_audio_path) > MAX_FILE_SIZE:
-                 os.remove(temp_audio_path)
-                 raise HTTPException(status_code=413, detail="File too large (Max 50MB)")
-
+            # 1. Prediction Probabilities
             features = FEATURE_EXTRACTOR.extract(temp_audio_path, augment=False)
+            features_scaled = SCALER.transform([features]) if SCALER else np.array([features])
             
-            if os.path.exists(temp_audio_path):
-                os.remove(temp_audio_path)
+            model_key = language if language in MODELS else "en"
+            model = MODELS.get(model_key)
+            if model:
+                preds = model.predict(features_scaled)[0]
+                audio_probs = [float(p) for p in preds]
+                pred_idx = np.argmax(preds)
+                response["audio"] = {
+                    "emotion": str(LABEL_ENCODER_CLASSES[pred_idx]),
+                    "confidence": float(preds[pred_idx]),
+                    "probabilities": audio_probs
+                }
             
-            if SCALER:
-                features_scaled = SCALER.transform([features])
-            else:
-                features_scaled = np.array([features])
+            # 2. Transcription for Summary Context (if no text provided)
+            if not context_text and ASR_PIPELINE:
+                asr_res = ASR_PIPELINE(temp_audio_path)
+                context_text = asr_res.get("text", "")
                 
-            model = MODELS.get(language, MODELS.get("en"))
-            if not model:
-                 raise Exception(f"No model available for language {language}")
-                 
-            preds = model.predict(features_scaled)[0]
-            audio_probs = [float(p) for p in preds]
-            pred_idx = np.argmax(preds)
-            confidence = float(preds[pred_idx])
-            
-            emotion_label = str(LABEL_ENCODER_CLASSES[pred_idx])
-            
-            response["audio"] = {
-                "emotion": emotion_label,
-                "confidence": confidence,
-                "probabilities": audio_probs,
-                "model_used": MODEL_PATHS.get(language, "Unknown")
-            }
-        except HTTPException:
-            raise
         except Exception as e:
-            print(f"Audio inference error: {e}")
-            raise HTTPException(status_code=500, detail=f"Audio inference failed: {str(e)}")
-            
+            print(f"Audio processing error: {e}")
+        finally:
+            if temp_audio_path and os.path.exists(temp_audio_path):
+                os.remove(temp_audio_path)
+
     # --- TEXT INFERENCE ---
     text_results = []
     if text:
@@ -216,27 +295,43 @@ async def analyze(
                     "confidence": text_results[0]['score'],
                     "top_3": text_results[:3]
                 }
-            else:
-                response["text"] = {
-                    "emotion": "neutral",
-                    "confidence": 0.5,
-                    "top_3": [{"emotion": "neutral", "score": 0.5}]
-                }
         except Exception as e:
-            print(f"Text inference error: {e}")
-            response["text"] = {"emotion": "neutral", "confidence": 0.5}
-        
-    # --- FUSION LOGIC ---
-    if audio and text:
-        final_emotion, final_conf = FUSION_ENGINE.fuse(audio_probs, text_results, LABEL_ENCODER_CLASSES)
-        response["final_emotion"] = final_emotion
-        response["final_confidence"] = final_conf
-    elif audio:
-        response["final_emotion"] = response["audio"]["emotion"]
-        response["final_confidence"] = response["audio"]["confidence"]
-    else:
-        response["final_emotion"] = response["text"]["emotion"]
-        response["final_confidence"] = response["text"]["confidence"]
+            print(f"Text analysis error: {e}")
+
+    # --- MULTIMODAL FUSION ---
+    final_emotion = "neutral"
+    final_confidence = 0.5
+    
+    if audio and text and audio_probs:
+        final_emotion, final_confidence = FUSION_ENGINE.fuse(audio_probs, text_results, LABEL_ENCODER_CLASSES)
+    elif audio and "audio" in response:
+        final_emotion = response["audio"]["emotion"]
+        final_confidence = response["audio"]["confidence"]
+    elif text and "text" in response:
+        final_emotion = response["text"]["emotion"]
+        final_confidence = response["text"]["confidence"]
+
+    response["final_emotion"] = final_emotion
+    response["final_confidence"] = final_confidence
+
+    # --- TRANSLATION & SUMMARY ---
+    summary = "No content available for summary."
+    if context_text:
+        try:
+            # 1. Detect Language
+            det_lang = detect(context_text)
+            response["detected_language"] = det_lang
+            
+            # 2. Translate if necessary
+            proc_text = TRANSLATOR.translate(context_text, det_lang)
+            
+            # 3. Generate Summary
+            summary = SUMMARIZER.generate(proc_text, final_emotion, final_confidence)
+        except Exception as e:
+            print(f"Summary generation error: {e}")
+            summary = f"Summary unavailable: {str(e)}"
+
+    response["summary"] = summary
 
     return response
 
