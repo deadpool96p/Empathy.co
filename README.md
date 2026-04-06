@@ -4,7 +4,8 @@ EmpathyCo (formerly EmotiDesk) is a multimodal emotion recognition SaaS Dashboar
 
 ## Project Structure
 - `frontend/` - React, TypeScript, and Vite-powered UI configured with Tailwind CSS v4.
-- `main.py` - FastAPI backend application for model inference.
+- `backend/` - FastAPI backend application for model inference (entry point: `main.py`).
+- `src/` - Reusable modules for audio processing, text analysis, and fusion.
 - `models/` - Trained models (`.h5`) for English, Hindi, and Marathi analysis.
 - `data/` - Raw and processed datasets for training phases.
 
@@ -26,8 +27,7 @@ python -m venv venv
 source venv/bin/activate  # Mac/Linux
 
 # Install dependencies
-pip install -r requirements.txt
-pip install fastapi uvicorn python-multipart
+pip install -r backend/requirements.txt
 ```
 
 2. **Frontend Environment**
@@ -38,20 +38,19 @@ npm install
 
 ### Running the Application
 
-The frontend `package.json` has been configured with `concurrently` to run both the Vite UI and the FastAPI backend simultaneously.
+You can start both the backend (Port 8001) and the frontend (Port 5173) simultaneously using the provided startup script at the project root:
+
+```bash
+# From the project root
+.\start.bat
+```
+
+Alternatively, you can run from the frontend folder:
 
 ```bash
 cd frontend
 npm run dev
 ```
 
-This ensures:
-- The React application is running at `http://localhost:5173`
-- The Python FastAPI backend acts on port `8000`.
-
 ### Environment Variables
-Ensure the `.env` file exists in `frontend/`:
-```env
-VITE_API_URL=http://localhost:8000
-```
-*(The Vite proxy acts identically behind the scenes).*
+Ensure the local configuration points to the correct backend port (8001). The Vite proxy in `vite.config.ts` is already configured for `http://localhost:8001`.
