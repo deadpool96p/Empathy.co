@@ -21,6 +21,7 @@ export interface TextAnalysis {
 }
 
 export interface AnalysisResponse {
+  analysis_id?: string;
   final_emotion?: string;
   final_confidence?: number;
   audio?: AudioAnalysis;
@@ -37,4 +38,15 @@ export interface TranscriptionResponse {
 
 export interface ModelsResponse {
   models: string[];
+}
+
+export interface FeedbackSubmission {
+  analysis_id: string;
+  input_type: 'audio' | 'text' | 'both';
+  text?: string;
+  predicted_emotion: string;
+  confidence: number;
+  user_correct: boolean;
+  corrected_emotion?: string;
+  comment?: string;
 }

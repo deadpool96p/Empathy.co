@@ -10,6 +10,7 @@ import {
 } from "recharts";
 import { Link2 } from "lucide-react";
 import type { AnalysisResponse } from "../services/types";
+import FeedbackUI from "./FeedbackUI";
 
 interface ResultsPanelProps {
   results: AnalysisResponse;
@@ -198,6 +199,17 @@ export function ResultsPanel({ results }: ResultsPanelProps) {
           )}
         </div>
       )}
+
+      {results.analysis_id && (
+        <FeedbackUI 
+          analysisId={results.analysis_id} 
+          inputType={results.audio && results.text ? 'both' : results.audio ? 'audio' : 'text'}
+          predictedEmotion={results.final_emotion || 'neutral'}
+          confidence={results.final_confidence || 0.5}
+          textContext={results.summary || ''}
+        />
+      )}
     </div>
   );
 }
+

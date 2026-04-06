@@ -31,3 +31,4 @@ tqdm==4.65.0
 langdetect==1.0.9
 sentencepiece==0.1.99
 sacremoses==0.0.53
+datasets==2.14.4

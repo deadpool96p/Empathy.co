@@ -1,0 +1,2 @@
+timestamp,analysis_id,input_type,text,audio_path,predicted_emotion,confidence,user_correct,corrected_emotion,comment,verified
+2026-04-06T21:33:39.728481,04f8b6f7-65aa-475a-87cb-a6d28b8b4ac1,text,Sad testing please,,angry,0.2,0,sad,test comment,1

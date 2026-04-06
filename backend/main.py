@@ -1,6 +1,7 @@
-from fastapi import FastAPI, UploadFile, File, Form, HTTPException
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from typing import Optional
+from pydantic import BaseModel
 import uvicorn
 import os
 import sys
@@ -8,6 +9,10 @@ import shutil
 import numpy as np
 import tensorflow as tf
 import joblib
+import uuid
+import datetime
+import csv
+from pathlib import Path
 
 # Add project root to path for src imports
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
@@ -103,6 +108,22 @@ class LanguageTranslator:
 SUMMARIZER = EmotionSummarizer()
 TRANSLATOR = LanguageTranslator()
 
+# Feedback Configuration
+DATA_DIR = Path(__file__).resolve().parent.parent / "data"
+AUDIO_CACHE_DIR = DATA_DIR / "audio_cache"
+FEEDBACK_AUDIO_DIR = DATA_DIR / "feedback_audio"
+FEEDBACK_CSV_PATH = DATA_DIR / "feedback_data.csv"
+
+class FeedbackSubmission(BaseModel):
+    analysis_id: str
+    input_type: str
+    text: Optional[str] = None
+    predicted_emotion: str
+    confidence: float
+    user_correct: bool
+    corrected_emotion: Optional[str] = None
+    comment: Optional[str] = None
+
 app = FastAPI(title="EmpathyCo Backend")
 
 # Allow CORS for local dev
@@ -157,6 +178,25 @@ async def load_artifacts():
         'LightweightConvTransformer': LightweightConvTransformer
     }
 
+    # Ensure directories exist
+    AUDIO_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    FEEDBACK_AUDIO_DIR.mkdir(parents=True, exist_ok=True)
+    
+    # Initialize CSV if not exists
+    if not FEEDBACK_CSV_PATH.exists():
+        with open(FEEDBACK_CSV_PATH, 'w', newline='', encoding='utf-8') as f:
+            writer = csv.writer(f)
+            writer.writerow(['timestamp', 'analysis_id', 'input_type', 'text', 'audio_path', 
+                             'predicted_emotion', 'confidence', 'user_correct', 
+                             'corrected_emotion', 'comment', 'verified'])
+
+    # Clean up old audio cache (simple approach: clear on startup, or just leave it for a cron)
+    for f in AUDIO_CACHE_DIR.glob("*"):
+        try:
+            f.unlink()
+        except:
+            pass
+
     for lang, path in MODEL_PATHS.items():
         if os.path.exists(path):
             try:
@@ -168,7 +208,12 @@ async def load_artifacts():
             print(f"Model path not found: {path} for language '{lang}'")
 
     print("Initializing Text Emotion Analyzer...")
-    TEXT_ANALYZER = TextEmotionAnalyzer(model_id="MilaNLProc/xlm-emo-t")
+    text_model_path = "../models/text_model_finetuned"
+    if os.path.exists(text_model_path):
+        print(f"Found fine-tuned text model at {text_model_path}, loading...")
+        TEXT_ANALYZER = TextEmotionAnalyzer(model_id=text_model_path)
+    else:
+        TEXT_ANALYZER = TextEmotionAnalyzer(model_id="MilaNLProc/xlm-emo-t")
 
     print("Initializing ASR Pipeline (openai/whisper-small)...")
     try:
@@ -245,20 +290,20 @@ async def analyze(
             language = "en"
 
     # Initialize results
-    response = {}
-    temp_audio_path = None
+    analysis_id = str(uuid.uuid4())
+    response = {"analysis_id": analysis_id}
     context_text = text
 
     # --- AUDIO INFERENCE ---
     audio_probs = None
     if audio:
         try:
-            temp_audio_path = f"temp_analyze_{audio.filename}"
-            with open(temp_audio_path, "wb") as buffer:
+            cached_audio_path = AUDIO_CACHE_DIR / f"{analysis_id}.wav"
+            with open(cached_audio_path, "wb") as buffer:
                 shutil.copyfileobj(audio.file, buffer)
             
             # 1. Prediction Probabilities
-            features = FEATURE_EXTRACTOR.extract(temp_audio_path, augment=False)
+            features = FEATURE_EXTRACTOR.extract(str(cached_audio_path), augment=False)
             features_scaled = SCALER.transform([features]) if SCALER else np.array([features])
             
             model_key = language if language in MODELS else "en"
@@ -275,21 +320,26 @@ async def analyze(
             
             # 2. Transcription for Summary Context (if no text provided)
             if not context_text and ASR_PIPELINE:
-                asr_res = ASR_PIPELINE(temp_audio_path)
+                asr_res = ASR_PIPELINE(str(cached_audio_path))
                 context_text = asr_res.get("text", "")
                 
         except Exception as e:
             print(f"Audio processing error: {e}")
-        finally:
-            if temp_audio_path and os.path.exists(temp_audio_path):
-                os.remove(temp_audio_path)
+            # We don't delete immediately; it will be cleaned up next startup
 
     # --- TEXT INFERENCE ---
     text_results = []
     if text:
         try:
+            is_short = len(text.split()) <= 3
             text_results = TEXT_ANALYZER.analyze(text)
+            
             if text_results:
+                # If it's a lexicon hit, the analyzer will have printed it, 
+                # but we can add a response-level log if needed.
+                if is_short and text_results[0]['score'] == 0.90:
+                    print(f"[API] Lexicon override applied for text: '{text}' -> {text_results[0]['emotion']}")
+                
                 response["text"] = {
                     "emotion": text_results[0]['emotion'],
                     "confidence": text_results[0]['score'],
@@ -334,6 +384,79 @@ async def analyze(
     response["summary"] = summary
 
     return response
+
+@app.post("/feedback")
+async def handle_feedback(feedback: FeedbackSubmission, background_tasks: BackgroundTasks):
+    timestamp = datetime.datetime.now().isoformat()
+    verified = False
+    feedback_audio_path = ""
+    
+    # Check if this involves audio and move it to permanent storage
+    if feedback.input_type in ["audio", "both"]:
+        cached_audio = AUDIO_CACHE_DIR / f"{feedback.analysis_id}.wav"
+        if cached_audio.exists():
+            perm_audio = FEEDBACK_AUDIO_DIR / f"{feedback.analysis_id}.wav"
+            shutil.move(str(cached_audio), str(perm_audio))
+            feedback_audio_path = str(perm_audio)
+    
+    # Save to CSV
+    try:
+        with open(FEEDBACK_CSV_PATH, 'a', newline='', encoding='utf-8') as f:
+            writer = csv.writer(f)
+            writer.writerow([
+                timestamp,
+                feedback.analysis_id,
+                feedback.input_type,
+                feedback.text or "",
+                feedback_audio_path,
+                feedback.predicted_emotion,
+                feedback.confidence,
+                "1" if feedback.user_correct else "0",
+                feedback.corrected_emotion or "",
+                feedback.comment or "",
+                "1" if verified else "0"
+            ])
+    except Exception as e:
+        print(f"Error saving feedback: {e}")
+        raise HTTPException(status_code=500, detail="Failed to save feedback")
+
+    return {"status": "success", "message": "Feedback recorded."}
+
+@app.post("/verify_feedback")
+async def verify_feedback(analysis_id: str = Form(...)):
+    """Simple endpoint to manually verify a feedback entry by ID."""
+    rows = []
+    found = False
+    if not FEEDBACK_CSV_PATH.exists():
+        raise HTTPException(status_code=404, detail="No feedback data found.")
+        
+    try:
+        with open(FEEDBACK_CSV_PATH, 'r', encoding='utf-8') as f:
+            reader = csv.reader(f)
+            header = next(reader)
+            rows.append(header)
+            for row in reader:
+                if row[1] == analysis_id:
+                    row[10] = "1"  # Set verified to "1"
+                    found = True
+                rows.append(row)
+                
+        if found:
+            with open(FEEDBACK_CSV_PATH, 'w', newline='', encoding='utf-8') as f:
+                writer = csv.writer(f)
+                writer.writerows(rows)
+            return {"status": "success", "message": f"Feedback {analysis_id} verified."}
+        else:
+            raise HTTPException(status_code=404, detail="Feedback ID not found.")
+    except Exception as e:
+        if isinstance(e, HTTPException): raise
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/reload_models")
+async def reload_models():
+    """Triggers the load_artifacts function to load new finetuned models without a restart."""
+    await load_artifacts()
+    return {"status": "success", "message": "Models reloaded."}
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8001)

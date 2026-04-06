@@ -1,0 +1,17 @@
+I:\CPP sem 4\EmotiDesk\venv\lib\site-packages\transformers\utils\generic.py:441: FutureWarning: `torch.utils._pytree._register_pytree_node` is deprecated. Please use `torch.utils._pytree.register_pytree_node` instead.
+  _torch_pytree._register_pytree_node(
+Traceback (most recent call last):
+  File "I:\CPP sem 4\EmotiDesk\backend\retrain_from_feedback.py", line 16, in <module>
+    from transformers import AutoTokenizer, AutoModelForSequenceClassification, Trainer, TrainingArguments
+  File "I:\CPP sem 4\EmotiDesk\venv\lib\site-packages\transformers\__init__.py", line 26, in <module>
+    from . import dependency_versions_check
+  File "I:\CPP sem 4\EmotiDesk\venv\lib\site-packages\transformers\dependency_versions_check.py", line 57, in <module>
+    require_version_core(deps[pkg])
+  File "I:\CPP sem 4\EmotiDesk\venv\lib\site-packages\transformers\utils\versions.py", line 117, in require_version_core
+    return require_version(requirement, hint)
+  File "I:\CPP sem 4\EmotiDesk\venv\lib\site-packages\transformers\utils\versions.py", line 111, in require_version
+    _compare_versions(op, got_ver, want_ver, requirement, pkg, hint)
+  File "I:\CPP sem 4\EmotiDesk\venv\lib\site-packages\transformers\utils\versions.py", line 44, in _compare_versions
+    raise ImportError(
+ImportError: huggingface-hub>=0.16.4,<1.0 is required for a normal functioning of this module, but found huggingface-hub==1.9.0.
+Try: pip install transformers -U or pip install -e '.[dev]' if you're working with git main

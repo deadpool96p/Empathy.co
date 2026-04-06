@@ -69,3 +69,18 @@ export const getModels = async (): Promise<ModelsResponse> => {
     throw new Error(error.message || "Failed to load models list");
   }
 };
+
+export const submitFeedback = async (data: any): Promise<{status: string, message: string}> => {
+  try {
+    const response = await api.post('/feedback', data, {
+      headers: { 'Content-Type': 'application/json' }
+    });
+    return response.data;
+  } catch (error: any) {
+    if (error.response?.data?.detail) {
+      throw new Error(typeof error.response.data.detail === 'string' ? error.response.data.detail : JSON.stringify(error.response.data.detail));
+    }
+    throw new Error(error.message || "Failed to submit feedback.");
+  }
+};
+
