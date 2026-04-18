@@ -293,7 +293,7 @@ def train_advanced_model_script(use_simple_model=False, tuning_config=None, lang
     print(f"Training complete. Model saved to {save_path}")
 
 if __name__ == "__main__":
-    train_advanced_model_script()
+    train_advanced_model_script(use_simple_model=True)
 
 
 # ============================================
