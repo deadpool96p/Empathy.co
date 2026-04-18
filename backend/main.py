@@ -184,6 +184,11 @@ async def load_artifacts():
         
     if os.path.exists(label_encoder_path):
         LABEL_ENCODER_CLASSES = np.load(label_encoder_path, allow_pickle=True)
+        # Ensure they are human readable strings
+        EMOTION_MAP = ['neutral', 'calm', 'happy', 'sad', 'angry', 'fearful', 'disgust', 'surprised']
+        if all(str(x).isdigit() for x in LABEL_ENCODER_CLASSES):
+            LABEL_ENCODER_CLASSES = np.array(EMOTION_MAP)
+        print(f"Loaded label encoder classes: {LABEL_ENCODER_CLASSES}")
     else:
         print(f"Warning: {label_encoder_path} not found!")
         LABEL_ENCODER_CLASSES = np.array(["neutral", "calm", "happy", "sad", "angry", "fearful", "disgust", "surprised"])

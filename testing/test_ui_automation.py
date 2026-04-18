@@ -117,6 +117,25 @@ async def run_transcribe(page):
     except:
         pass
 
+async def run_fusion(page):
+    await clear_session(page)
+    e_name_audio = "angry"
+    e_name_text = "happy"
+    
+    # Text input
+    await page.fill("textarea", "I am so excited and joyful!")
+    
+    # Audio input (Angry file)
+    file_path = str(RAVDESS_BASE / "03-01-05-01-01-01-01.wav")
+    if not os.path.exists(file_path): return
+    await page.locator("input[type=file]").set_input_files(file_path)
+    
+    shot_name = f"test_fusion_{e_name_text}_{e_name_audio}.png"
+    ok, stat = await trigger_analyze(page, "fusion", shot_name, "fusion")
+    
+    s_link = f"[screenshot](screenshots/{shot_name})" if ok else "Fail"
+    report_rows.append(f"| Fusion | text+audio | Happy Text + Angry Audio | fusion | CHECK_IMG | CHECK_IMG | {stat} | {s_link} |")
+
 async def main():
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=True)
@@ -140,12 +159,16 @@ async def main():
         try: await run_transcribe(page)
         except Exception as x: print(x)
             
+        print("Testing Fusion")
+        try: await run_fusion(page)
+        except Exception as x: print(x)
+            
         await browser.close()
         
         with open(REPORT_PATH, "w", encoding="utf-8") as f:
             f.write("# EmpathyCo Test Report\n\n")
             f.write("## Summary\n")
-            f.write(f"- Total test cases: {len(report_rows)} + {len(ml_rows)} + 1 transcription\n\n")
+            f.write(f"- Total test cases: {len(report_rows)} + {len(ml_rows)} multilingual + 1 transcription\n\n")
             f.write("## Detailed Results\n\n")
             f.write("| Emotion | Input Type | Input Content | Expected | Predicted | Confidence | Pass/Fail | Screenshot |\n")
             f.write("|---------|------------|---------------|----------|-----------|------------|-----------|-------------|\n")
