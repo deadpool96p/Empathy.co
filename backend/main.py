@@ -135,15 +135,29 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Ensure robust absolute paths regardless of execution directory
+BASE_DIR = Path(__file__).resolve().parent.parent
+
+# --- MODEL LOADING LOGIC ---
+SCALER_PATH = BASE_DIR / "models" / "scaler_advanced.pkl"
+LABEL_ENCODER_PATH = BASE_DIR / "data" / "processed" / "label_encoder_advanced.npy"
+
+AUDIO_MODELS = {
+    "en": BASE_DIR / "models" / "audio_model_simple.h5",
+    "hi": BASE_DIR / "models" / "audio_model_simple.h5",
+    "mr": BASE_DIR / "models" / "audio_model_simple.h5",
+    "multi": BASE_DIR / "models" / "audio_model_simple.h5",
+}
+
 # Global model artifacts
 SCALER = None
 LABEL_ENCODER_CLASSES = None
 MODELS = {}
 MODEL_PATHS = {
-    "en": "../models/audio_model_simple.h5",
-    "hi": "../models/audio_model_simple.h5",
-    "mr": "../models/audio_model_simple.h5",
-    "multi": "../models/audio_model_simple.h5"  # Fallback
+    "en": BASE_DIR / "models" / "audio_model_simple.h5",
+    "hi": BASE_DIR / "models" / "audio_model_simple.h5",
+    "mr": BASE_DIR / "models" / "audio_model_simple.h5",
+    "multi": BASE_DIR / "models" / "audio_model_simple.h5"  # Fallback
 }
 FEATURE_EXTRACTOR = EnhancedFeatureExtractor(sample_rate=16000)
 
@@ -158,12 +172,13 @@ MAX_FILE_SIZE = 50 * 1024 * 1024  # 50MB
 async def load_artifacts():
     global SCALER, LABEL_ENCODER_CLASSES, MODELS, TEXT_ANALYZER, ASR_PIPELINE
     
-    # Paths relative to backend/ directory
-    scaler_path = "../models/scaler_advanced.pkl"
-    label_encoder_path = "../data/processed/label_encoder_advanced.npy"
+    # Paths dynamically resolved via BASE_DIR
+    scaler_path = BASE_DIR / "models" / "scaler_advanced.pkl"
+    label_encoder_path = BASE_DIR / "data" / "processed" / "label_encoder_advanced.npy"
     
     if os.path.exists(scaler_path):
         SCALER = joblib.load(scaler_path)
+        print("Loaded scaler.")
     else:
         print(f"Warning: {scaler_path} not found!")
         
